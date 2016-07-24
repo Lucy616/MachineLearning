@@ -1,0 +1,112 @@
+---
+title: "Project4"
+author: "Lucy"
+date: "July 17, 2016"
+output: html_document
+---
+# Read in Data
+```{r}
+training_URL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testing_URL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(training_URL, na.strings = c("NA",""))
+testing <- read.csv(testing_URL, na.strings = c("NA",""))
+```
+
+# Load Pacages
+```{r}
+library(caret)
+library(randomForest)
+```
+
+
+## explore the dataset
+```{r}
+dim(training)
+dim(testing)
+str(training)
+names(training)
+summary(training)
+table(training$classe)
+```
+
+# Missing data
+```{r}
+missing <- sapply(training, function(x) sum(is.na(x))) 
+missing
+missing <- as.data.frame(t(missing))
+```
+
+
+# Build-Model -- Random Forest
+Because the classe variable is a categorical variable, so I decided to userandom Forest. The results of these In order to minium overfitting I used repeated k-fold cross validation with 10-fold and 1 repeat.
+```{r}
+train_control<- trainControl(method="cv", number=10, savePredictions = TRUE)
+```
+
+I first build the model with average measure and total measures. However, the sample error is not ideal. So I decided to try building a model with all the non-missing variables. 
+
+# subset training dataset to those without missing data varaibles
+```{r}
+names_miss <- NULL
+for (i in names(missing)){
+        if(missing[1,i]!=0){
+                names_miss <- c(names_miss, i)  
+        }
+}
+
+training <- training[, !names(training) %in% names_miss]
+```
+# Delete unuseful index variables
+```{r}
+names(training)
+training <- training[,8:60]
+```
+
+
+First Model -- predict variable are average measures (without missing). 
+However, there are no varibles of averge measures without missing data. 
+```{r}
+names <- names(training)
+names_avg <- grep("^avg", names, value=TRUE)
+names_avg
+```
+
+
+Second Model -- predicters are total measures ( without missing )
+```{r}
+names_total <- grep("^total", names, value=TRUE)
+names_total
+modFit2 <- train(classe ~ total_accel_belt + total_accel_arm + total_accel_dumbbell + total_accel_forearm , 
+                 trControl=train_control,
+                 method="rf", data=training) 
+modFit2
+```
+
+Tnird Model -- using all non-missing varaibles in the dataset
+```{r}
+modFit3 <- train(classe ~ ., 
+                trControl=train_control,
+                method="rf", data=training)
+modFit3
+
+```
+
+# Compare the three models
+The accurary of Model2 is about 0.68. And for model two is about 99%. We will use modFit3 as our final model -- using all the non-missing varialbes to predict. The expected out of sample error should be pretty small -- less than 5% based on the confusion matrix below. 
+
+```{r}
+Train.Pred <- predict(modFit3, training)
+confusionMatrix(Train.Pred, training$classe)
+```
+
+# Predicting new values
+```{r}
+names(testing)
+testing<- testing[, names(testing) %in% names(training)]
+pred <- predict(modFit3, testing)
+pred
+```
+
+
+
+
